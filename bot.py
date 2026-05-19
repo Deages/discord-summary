@@ -11,10 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.8 - Debug Exception Exposure 🔍
-# 1. Exposed swallowed exceptions in process_ai_request to terminal logging.
-# 2. Restored GITHUB_RAW_URL and all logic cleanly to pristine v5.0.7 baseline.
-BOT_VERSION = "v5.0.8 - Debug Exception Exposure 🔍"
+# v5.0.8 - Grounding Tool Constraint 🛰️
+# 1. Added prompt-level tool constraint to !tldw to force a single search query.
+# 2. Retained robust exception visibility inside process_ai_request for debugging.
+# 3. Preserved pristine URL paths, core features, and data structures from v5.0.7.
+BOT_VERSION = "v5.0.8 - Grounding Tool Constraint 🛰️"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -358,6 +359,7 @@ async def tldw(ctx):
             
             prompt = (
                 f"You are a research assistant. Research this YouTube video: {video_url}\n\n"
+                "STRICT TOOL CONSTRAINT: You are permitted to execute exactly ONE single Google Search query. Do not submit multiple parallel search lookups or multi-query requests under any circumstances.\n\n"
                 "INSTRUCTIONS:\n"
                 "1. Provide a short summary of 2-3 sentences at most for what this video is about. Use bullet points.\n"
                 "2. Provide an assessment on whether it is factually accurate in its key messages or if it is misinformation. Use bullet points.\n"
@@ -472,7 +474,7 @@ async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts
                     log_info(f"API ClientError intercepted for model {model_name} (Key Index {i}): {e}")
                     return await ctx.send(f"⚠️ API Error: `{e}`")
                 except Exception as e:
-                    log_info(f"CRITICAL API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
+                    log_info(f"API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
                     continue
             if response: break
         

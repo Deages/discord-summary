@@ -11,17 +11,16 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.9 - Syntax Fix 🛠️
-# 1. Repaired truncated string literal inside the !botlog command block.
-# 2. Maintained all v5.0.8 granular exception exposure and logging systems intact.
-# 3. Preserved all grounding tools, safety metrics, and feature sets.
-BOT_VERSION = "v5.0.9 - Syntax Fix 🛠️"
+# v5.0.8 - Debug Exception Exposure 🔍
+# 1. Exposed swallowed exceptions in process_ai_request to terminal logging.
+# 2. Restored GITHUB_RAW_URL and all logic cleanly to pristine v5.0.7 baseline.
+BOT_VERSION = "v5.0.8 - Debug Exception Exposure 🔍"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
 
 # NOTE: The raw URL for the GitHub Auto-Sync feature.
-GITHUB_RAW_URL = "[https://raw.githubusercontent.com/Deages/discord-summary/main/bot.py](https://raw.githubusercontent.com/Deages/discord-summary/main/bot.py)"
+GITHUB_RAW_URL = "https://raw.githubusercontent.com/Deages/discord-summary/main/bot.py"
 
 # --- LOGGING CONFIGURATION ---
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')

@@ -2,6 +2,7 @@
 
 A lightweight, Dockerized Discord bot that summarizes channel conversations and provides high-fidelity fact-checking using Google's Gemini AI. It features **intelligent API key rotation**, **isolated reasoning models**, and **autonomous GitHub synchronization**.
 
+i too can regulate
 ---
 
 ## 🌟 Features

@@ -11,16 +11,17 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.8 - Debug Exception Exposure 🔍
-# 1. Exposed swallowed exceptions in process_ai_request to terminal logging.
-# 2. Maintained all existing features, commands, and grounding systems from v5.0.7.
-BOT_VERSION = "v5.0.8 - Debug Exception Exposure 🔍"
+# v5.0.9 - Syntax Fix 🛠️
+# 1. Repaired truncated string literal inside the !botlog command block.
+# 2. Maintained all v5.0.8 granular exception exposure and logging systems intact.
+# 3. Preserved all grounding tools, safety metrics, and feature sets.
+BOT_VERSION = "v5.0.9 - Syntax Fix 🛠️"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
 
 # NOTE: The raw URL for the GitHub Auto-Sync feature.
-GITHUB_RAW_URL = "https://raw.githubusercontent.com/Deages/discord-summary/main/bot.py"
+GITHUB_RAW_URL = "[https://raw.githubusercontent.com/Deages/discord-summary/main/bot.py](https://raw.githubusercontent.com/Deages/discord-summary/main/bot.py)"
 
 # --- LOGGING CONFIGURATION ---
 log_formatter = logging.Formatter('%(asctime)s %(levelname)s %(message)s')
@@ -400,8 +401,7 @@ async def botlog(ctx):
         with open("bot_terminal.log", "r") as f:
             lines = f.readlines()
             last_10 = "".join(lines[-10:])
-            await ctx.send("```text\n" + last_10 + "\n
-```")
+            await ctx.send("```text\n" + last_10 + "\n```")
     except Exception: await ctx.send("Log read failed.")
 
 @bot.command(name="update")

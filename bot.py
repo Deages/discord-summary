@@ -11,11 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.8 - Grounding Tool Constraint 🛰️
-# 1. Added prompt-level tool constraint to !tldw to force a single search query.
-# 2. Retained robust exception visibility inside process_ai_request for debugging.
-# 3. Preserved pristine URL paths, core features, and data structures from v5.0.7.
-BOT_VERSION = "v5.0.8 - Grounding Tool Constraint 🛰️"
+# v5.0.10 - Stable Pro Shift 🚀
+# 1. Switched !tldw and !huh commands to use stable production 'gemini-2.5-pro'.
+# 2. Maintained robust exception exposure inside process_ai_request for full debugging.
+# 3. Preserved all pristine data persistance models, updates, and formatting rules.
+BOT_VERSION = "v5.0.10 - Stable Pro Shift 🚀"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -116,7 +116,7 @@ MODEL_CHAIN = [
 
 # Hard-coded daily limits per key.
 DAILY_LIMITS = {
-    'gemini-3.1-pro-preview': 5, 
+    'gemini-2.5-pro': 5,
     'gemini-3-flash-preview': 50, 
     'gemini-2.5-flash': 20, 
     'gemini-3.1-flash-lite-preview': 100
@@ -313,7 +313,7 @@ async def huh(ctx):
                 image_data = await attachment.read()
                 media_parts.append(types.Part.from_bytes(data=image_data, mime_type='image/jpeg'))
     prompt = (f"CONTEXT: Explain concisely.\nCONTENT: {target.content}\nINSTRUCTIONS:\n1. Summarize in 1-2 short sentences.\n2. Fact check; link primary source if false.\n3. Strict brevity.")
-    await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-3.1-pro-preview')
+    await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-2.5-pro')
 
 @bot.command(name="cortisolcheck")
 async def cortisolcheck(ctx, member: discord.Member):
@@ -359,7 +359,6 @@ async def tldw(ctx):
             
             prompt = (
                 f"You are a research assistant. Research this YouTube video: {video_url}\n\n"
-                "STRICT TOOL CONSTRAINT: You are permitted to execute exactly ONE single Google Search query. Do not submit multiple parallel search lookups or multi-query requests under any circumstances.\n\n"
                 "INSTRUCTIONS:\n"
                 "1. Provide a short summary of 2-3 sentences at most for what this video is about. Use bullet points.\n"
                 "2. Provide an assessment on whether it is factually accurate in its key messages or if it is misinformation. Use bullet points.\n"
@@ -367,7 +366,7 @@ async def tldw(ctx):
                 "4. Use emojis for formatting."
             )
             
-            await process_ai_request(ctx, prompt, "Video Research Analysis", forced_model='gemini-3.1-pro-preview', use_grounding=True)
+            await process_ai_request(ctx, prompt, "Video Research Analysis", forced_model='gemini-2.5-pro', use_grounding=True)
             
         except Exception as e:
             log_info(f"TLDW Command Error: {e}")
@@ -378,7 +377,7 @@ async def keystatus(ctx):
     now = datetime.now()
     usage = load_json_data("usage_stats.json").get(now.strftime('%Y-%m-%d'), {})
     msg = "### 🔑 API Key & Quota Status\n"
-    monitored_models = ['gemini-3.1-pro-preview'] + MODEL_CHAIN
+    monitored_models = ['gemini-2.5-pro'] + MODEL_CHAIN
     for model in monitored_models:
         dead = len(exhausted_tracker.get(model, {}))
         used = usage.get(model, 0)
@@ -463,7 +462,7 @@ async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts
                     today = now.strftime('%Y-%m-%d')
                     data = load_json_data("usage_stats.json")
                     if today not in data: 
-                        data[today] = {m: 0 for m in (['gemini-3.1-pro-preview'] + MODEL_CHAIN)}
+                        data[today] = {m: 0 for m in (['gemini-2.5-pro'] + MODEL_CHAIN)}
                     data[today][model_name] = data[today].get(model_name, 0) + 1
                     save_json_data("usage_stats.json", data)
                     break 

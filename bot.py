@@ -11,10 +11,10 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.7 - Prompt Refinement 📝
-# 1. Refined !tldr and !arguments prompts to strictly use bullet points for summaries.
-# 2. Reordered prompt instructions to ensure mogging results appear after the content.
-BOT_VERSION = "v5.0.7 - Prompt Refinement 📝"
+# v5.0.8 - Debug Exception Exposure 🔍
+# 1. Exposed swallowed exceptions in process_ai_request to terminal logging.
+# 2. Maintained all existing features, commands, and grounding systems from v5.0.7.
+BOT_VERSION = "v5.0.8 - Debug Exception Exposure 🔍"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -400,7 +400,8 @@ async def botlog(ctx):
         with open("bot_terminal.log", "r") as f:
             lines = f.readlines()
             last_10 = "".join(lines[-10:])
-            await ctx.send("```text\n" + last_10 + "\n```")
+            await ctx.send("```text\n" + last_10 + "\n
+```")
     except Exception: await ctx.send("Log read failed.")
 
 @bot.command(name="update")
@@ -469,8 +470,11 @@ async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts
                     if "429" in str(e): 
                         exhausted_tracker[model_name][i] = now + timedelta(seconds=65)
                         continue
+                    log_info(f"API ClientError intercepted for model {model_name} (Key Index {i}): {e}")
                     return await ctx.send(f"⚠️ API Error: `{e}`")
-                except Exception: continue
+                except Exception as e:
+                    log_info(f"CRITICAL API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
+                    continue
             if response: break
         
         if not response: return await ctx.send(f"🔄 Quota Error: `{target_models}` exhausted.")
@@ -543,3 +547,4 @@ async def arguments(ctx, *, args: str = "50"):
     await process_ai_request(ctx, prompt, "Argument Analysis", update_stats=True)
 
 if DISCORD_TOKEN: bot.run(DISCORD_TOKEN)
+```eof

@@ -11,11 +11,10 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.1.0 - Application Commands Architecture 🚀
-# 1. Migrated all user commands to `@bot.hybrid_command` for dual prefix/slash support.
-# 2. Re-engineered process_ai_request and fetch_history to handle unified Interaction context.
-# 3. Implemented automatic command tree synchronization inside the on_ready routine.
-BOT_VERSION = "v5.1.0 - Application Commands Architecture 🚀"
+# v5.1.1 - Application Command Size Fix 🛠️
+# 1. Shortened all hybrid command description fields to strictly conform to Discord's 100-char max cap.
+# 2. Maintained pristine application flow, automated global tree syncing, and debugging metrics.
+BOT_VERSION = "v5.1.1 - Application Command Size Fix 🛠️"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -259,7 +258,7 @@ def get_rank_class(ratio):
 
 # --- CORE COMMANDS ---
 
-@bot.hybrid_command(name="help", description="Displays all functional summary and analytics operations.")
+@bot.hybrid_command(name="help", description="Displays summary and analytics operations descriptions.")
 async def help_command(ctx):
     help_text = (
         "🤖 **Bot Commands**\n"
@@ -284,7 +283,7 @@ async def help_command(ctx):
     )
     await ctx.send(help_text)
 
-@bot.hybrid_command(name="version", description="Outputs technical diagnostic data, build hashes, and active engine uptime.")
+@bot.hybrid_command(name="version", description="Outputs active engine uptime and build changelogs.")
 async def version(ctx):
     delta = datetime.now() - START_TIME
     hours, remainder = divmod(int(delta.total_seconds()), 3600)
@@ -294,7 +293,7 @@ async def version(ctx):
     msg = (f"🤖 **Current Version:** `{BOT_VERSION}`\n⏱️ **Uptime:** `{uptime_str}`\n\n**Recent Changes:**\n{changelog}")
     await ctx.send(msg)
 
-@bot.hybrid_command(name="moggboard", description="Exposes the quantitative leadership metrics and dominance ratios for this guild.")
+@bot.hybrid_command(name="moggboard", description="Exposes the conversational leadership metrics and dominance ratios for this guild.")
 async def moggboard(ctx):
     all_data = load_json_data("mogg_stats.json")
     server_data = all_data.get(str(ctx.guild.id), {})
@@ -323,7 +322,7 @@ async def huh(ctx):
     prompt = (f"CONTEXT: Explain concisely.\nCONTENT: {target.content}\nINSTRUCTIONS:\n1. Summarize in 1-2 short sentences.\n2. Fact check; link primary source if false.\n3. Strict brevity.")
     await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-3.1-pro-preview')
 
-@bot.hybrid_command(name="cortisolcheck", description="Maps chronological conversational analytics to gauge current metabolic tension indicators.")
+@bot.hybrid_command(name="cortisolcheck", description="Maps chronological conversational analytics to gauge metabolic tension indicators.")
 async def cortisolcheck(ctx, member: discord.Member):
     """Analyzes user messages using standard model chain."""
     await ctx.defer()
@@ -346,7 +345,7 @@ async def cortisolcheck(ctx, member: discord.Member):
     prompt = (f"Analyze messages from **{member.display_name}**. INSTRUCTIONS: 1. Detect cortisol/aggression. 2. Extremely short diagnostic. 3. Themed emojis. 4. No treatment advice.\nTRANSCRIPT:\n" + "\n".join(transcript_list))
     await process_ai_request(ctx, prompt, f"Cortisol Diagnostic: {member.display_name}", forced_model=None)
 
-@bot.hybrid_command(name="tldw", description="Ingests a structural YouTube index link and applies deep reasoning synthesis with search lookup validation.")
+@bot.hybrid_command(name="tldw", description="Ingests a YouTube link and provides a deep reasoning summary with grounding lookups.")
 async def tldw(ctx):
     """Summarizes and fact-checks a YouTube video with bullet point formatting."""
     if not ctx.message or not ctx.message.reference:
@@ -381,7 +380,7 @@ async def tldw(ctx):
         log_info(f"TLDW Command Error: {e}")
         await ctx.send("⚠️ Error researching the video content.")
 
-@bot.hybrid_command(name="keystatus", description="Exposes infrastructure health metrics and remaining model compute token balances across active clusters.")
+@bot.hybrid_command(name="keystatus", description="Exposes infrastructure key quotas and remaining compute limits.")
 async def keystatus(ctx):
     now = datetime.now()
     usage = load_json_data("usage_stats.json").get(now.strftime('%Y-%m-%d'), {})

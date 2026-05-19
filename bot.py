@@ -547,4 +547,3 @@ async def arguments(ctx, *, args: str = "50"):
     await process_ai_request(ctx, prompt, "Argument Analysis", update_stats=True)
 
 if DISCORD_TOKEN: bot.run(DISCORD_TOKEN)
-```eof

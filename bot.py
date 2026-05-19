@@ -11,11 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.11 - Premium Pro Restoration 👑
-# 1. Reverted model overrides back to 'gemini-3.1-pro-preview' for !tldw and !huh.
-# 2. Maintained error exposure systems to ensure seamless tracking on paid quotas.
-# 3. Preserved pristine file sync paths, features, and markdown configurations.
-BOT_VERSION = "v5.0.11 - Premium Pro Restoration 👑"
+# v5.1.0 - Application Commands Architecture 🚀
+# 1. Migrated all user commands to `@bot.hybrid_command` for dual prefix/slash support.
+# 2. Re-engineered process_ai_request and fetch_history to handle unified Interaction context.
+# 3. Implemented automatic command tree synchronization inside the on_ready routine.
+BOT_VERSION = "v5.1.0 - Application Commands Architecture 🚀"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -182,6 +182,14 @@ async def on_ready():
     else:
         log_info("YT API Diagnostic: Library not found in path.")
 
+    # Global slash command application tree synchronization handler
+    try:
+        log_info("Synchronizing application command trees globally...")
+        await bot.tree.sync()
+        log_info("Application command trees successfully unified with Discord production.")
+    except Exception as e:
+        log_info(f"Non-fatal Tree Sync Failure: {e}")
+
     update_file = os.path.join(os.getcwd(), "update_channel.txt")
     pending_file = os.path.join(os.getcwd(), "pending_update.txt")
     
@@ -251,25 +259,24 @@ def get_rank_class(ratio):
 
 # --- CORE COMMANDS ---
 
-@bot.command(name="help")
+@bot.hybrid_command(name="help", description="Displays all functional summary and analytics operations.")
 async def help_command(ctx):
     help_text = (
         "🤖 **Bot Commands**\n"
-        "**`!version`**\n"
+        "**`/version`**\n"
         "Shows build version, uptime, and changelog.\n\n"
-        "**`!tldr [amount/today]`**\n"
+        "**`/tldr [amount/today]`**\n"
         "Bullet-point summaries + Cortisol detection.\n\n"
-        "**`!tldw`**\n"
-        "**(Reply Required)** Summarizes and fact-checks YouTube videos.\n\n"
-        "**`!huh`**\n"
-        "**(Reply Required)** Explains content and fact-checks a single message.\n\n"
-        "**`!arguments [amount/today]`**\n"
+        "**`/tldw`**\n"
+        "**(Reply Required via Message Link / Prefix Context)** Summarizes and fact-checks YouTube videos.\n\n"
+        "**`/huh`**\n"
+        "**(Reply Required via Prefix Context)** Explains content and fact-checks a single message.\n\n"
+        "**`/arguments [amount/today]`**\n"
         "Conflict analysis with bullet-point evidence.\n\n"
-        "**`!cortisolcheck @name`**\n"
-        "Analyzes user aggression levels (Flash model).\n\n"
-        "**`!moggboard`**\n"
+        "**`/cortisolcheck @name`**\n"
+        "**`/moggboard`**\n"
         "View the server's dominance hierarchy.\n\n"
-        "**`!keystatus`**\n"
+        "**`/keystatus`**\n"
         "Check API health and daily quotas.\n\n"
         "----- \n"
         "🛡️ **Admin Commands**\n"
@@ -277,7 +284,7 @@ async def help_command(ctx):
     )
     await ctx.send(help_text)
 
-@bot.command(name="version")
+@bot.hybrid_command(name="version", description="Outputs technical diagnostic data, build hashes, and active engine uptime.")
 async def version(ctx):
     delta = datetime.now() - START_TIME
     hours, remainder = divmod(int(delta.total_seconds()), 3600)
@@ -287,7 +294,7 @@ async def version(ctx):
     msg = (f"🤖 **Current Version:** `{BOT_VERSION}`\n⏱️ **Uptime:** `{uptime_str}`\n\n**Recent Changes:**\n{changelog}")
     await ctx.send(msg)
 
-@bot.command(name="moggboard")
+@bot.hybrid_command(name="moggboard", description="Exposes the quantitative leadership metrics and dominance ratios for this guild.")
 async def moggboard(ctx):
     all_data = load_json_data("mogg_stats.json")
     server_data = all_data.get(str(ctx.guild.id), {})
@@ -300,9 +307,10 @@ async def moggboard(ctx):
         msg += f"{i}. **{user}**\n> **Rank:** `{get_rank_class(ratio)}` | **Stats:** `{w}W - {l}L` ({ratio*100:.1f}%)\n\n"
     await ctx.send(msg)
 
-@bot.command(name="huh")
+@bot.hybrid_command(name="huh", description="Decodes context and provides an intensive fact-check over referenced content.")
 async def huh(ctx):
-    if not ctx.message.reference: return await ctx.send("❌ Reply to a message with `!huh`.")
+    if not ctx.message or not ctx.message.reference: 
+        return await ctx.send("❌ For hybrid slash use, you must reply to a target message using prefix !huh pattern.")
     try: await ctx.message.add_reaction("🔍")
     except: pass
     target = await ctx.channel.fetch_message(ctx.message.reference.message_id)
@@ -315,64 +323,65 @@ async def huh(ctx):
     prompt = (f"CONTEXT: Explain concisely.\nCONTENT: {target.content}\nINSTRUCTIONS:\n1. Summarize in 1-2 short sentences.\n2. Fact check; link primary source if false.\n3. Strict brevity.")
     await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-3.1-pro-preview')
 
-@bot.command(name="cortisolcheck")
+@bot.hybrid_command(name="cortisolcheck", description="Maps chronological conversational analytics to gauge current metabolic tension indicators.")
 async def cortisolcheck(ctx, member: discord.Member):
     """Analyzes user messages using standard model chain."""
-    try: await ctx.message.add_reaction("🧪")
+    await ctx.defer()
+    try: 
+        if ctx.message: await ctx.message.add_reaction("🧪")
     except: pass
-    async with ctx.typing():
-        time_limit = datetime.now() - timedelta(minutes=30)
-        transcript_list = []
-        async for msg in ctx.channel.history(after=time_limit, oldest_first=True, limit=500):
+    time_limit = datetime.now() - timedelta(minutes=30)
+    transcript_list = []
+    async for msg in ctx.channel.history(after=time_limit, oldest_first=True, limit=500):
+        if msg.author.id == member.id:
+            transcript_list.append(f"MSG: {msg.content}")
+    if not transcript_list:
+        async for msg in ctx.channel.history(limit=2000):
             if msg.author.id == member.id:
                 transcript_list.append(f"MSG: {msg.content}")
-        if not transcript_list:
-            async for msg in ctx.channel.history(limit=2000):
-                if msg.author.id == member.id:
-                    transcript_list.append(f"MSG: {msg.content}")
-                    if len(transcript_list) >= 20: break
-            transcript_list.reverse()
-        if not transcript_list:
-            return await ctx.send(f"⚠️ No message history found for **{member.display_name}**.")
-        prompt = (f"Analyze messages from **{member.display_name}**. INSTRUCTIONS: 1. Detect cortisol/aggression. 2. Extremely short diagnostic. 3. Themed emojis. 4. No treatment advice.\nTRANSCRIPT:\n" + "\n".join(transcript_list))
-        await process_ai_request(ctx, prompt, f"Cortisol Diagnostic: {member.display_name}", forced_model=None)
+                if len(transcript_list) >= 20: break
+        transcript_list.reverse()
+    if not transcript_list:
+        return await ctx.send(f"⚠️ No message history found for **{member.display_name}**.")
+    prompt = (f"Analyze messages from **{member.display_name}**. INSTRUCTIONS: 1. Detect cortisol/aggression. 2. Extremely short diagnostic. 3. Themed emojis. 4. No treatment advice.\nTRANSCRIPT:\n" + "\n".join(transcript_list))
+    await process_ai_request(ctx, prompt, f"Cortisol Diagnostic: {member.display_name}", forced_model=None)
 
-@bot.command(name="tldw")
+@bot.hybrid_command(name="tldw", description="Ingests a structural YouTube index link and applies deep reasoning synthesis with search lookup validation.")
 async def tldw(ctx):
     """Summarizes and fact-checks a YouTube video with bullet point formatting."""
-    if not ctx.message.reference:
-        return await ctx.send("❌ You must reply to a message containing a YouTube link with `!tldw`.")
+    if not ctx.message or not ctx.message.reference:
+        return await ctx.send("❌ Link analysis requires launching via classic standard layout or reply mapping context.")
     
     try: await ctx.message.add_reaction("📺")
     except: pass
 
-    async with ctx.typing():
-        try:
-            target = await ctx.channel.fetch_message(ctx.message.reference.message_id)
-            regex = r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=[^ \n&]+|youtu\.be/[^ \n&?]+))"
-            match = re.search(regex, target.content)
-            
-            if not match:
-                return await ctx.send("❌ No valid YouTube link found in the replied message.")
-            
-            video_url = match.group(1)
-            
-            prompt = (
-                f"You are a research assistant. Research this YouTube video: {video_url}\n\n"
-                "INSTRUCTIONS:\n"
-                "1. Provide a short summary of 2-3 sentences at most for what this video is about. Use bullet points.\n"
-                "2. Provide an assessment on whether it is factually accurate in its key messages or if it is misinformation. Use bullet points.\n"
-                "3. Provide a credible authoritative source reference to support that assessment. Use bullet points.\n"
-                "4. Use emojis for formatting."
-            )
-            
-            await process_ai_request(ctx, prompt, "Video Research Analysis", forced_model='gemini-3.1-pro-preview', use_grounding=True)
-            
-        except Exception as e:
-            log_info(f"TLDW Command Error: {e}")
-            await ctx.send("⚠️ Error researching the video content.")
+    await ctx.defer()
+    try:
+        target = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        regex = r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=[^ \n&]+|youtu\.be/[^ \n&?]+))"
+        match = re.search(regex, target.content)
+        
+        if not match:
+            return await ctx.send("❌ No valid YouTube link found in the replied message.")
+        
+        video_url = match.group(1)
+        
+        prompt = (
+            f"You are a research assistant. Research this YouTube video: {video_url}\n\n"
+            "INSTRUCTIONS:\n"
+            "1. Provide a short summary of 2-3 sentences at most for what this video is about. Use bullet points.\n"
+            "2. Provide an assessment on whether it is factually accurate in its key messages or if it is misinformation. Use bullet points.\n"
+            "3. Provide a credible authoritative source reference to support that assessment. Use bullet points.\n"
+            "4. Use emojis for formatting."
+        )
+        
+        await process_ai_request(ctx, prompt, "Video Research Analysis", forced_model='gemini-3.1-pro-preview', use_grounding=True)
+        
+    except Exception as e:
+        log_info(f"TLDW Command Error: {e}")
+        await ctx.send("⚠️ Error researching the video content.")
 
-@bot.command(name="keystatus")
+@bot.hybrid_command(name="keystatus", description="Exposes infrastructure health metrics and remaining model compute token balances across active clusters.")
 async def keystatus(ctx):
     now = datetime.now()
     usage = load_json_data("usage_stats.json").get(now.strftime('%Y-%m-%d'), {})
@@ -428,88 +437,89 @@ async def fetch_history(ctx, args):
         if len(links) >= 2:
             s_id, e_id = sorted([int(links[0]), int(links[1])])
             target_history = ctx.channel.history(after=await ctx.channel.fetch_message(s_id), before=await ctx.channel.fetch_message(e_id), oldest_first=True, limit=300)
-        elif ctx.message.reference:
+        elif ctx.message and ctx.message.reference:
             target_history = ctx.channel.history(after=await ctx.channel.fetch_message(ctx.message.reference.message_id), oldest_first=True, limit=200)
         else:
             numbers = re.findall(r'\d+', raw_input)
             target_history = ctx.channel.history(limit=min(int(numbers[0]) if numbers else 50, 300))
     async for msg in target_history:
-        if msg.author.bot or msg.id == ctx.message.id: continue
+        if msg.author.bot or (ctx.message and msg.id == ctx.message.id): continue
         rx_str = f" (REACTIONS: {[f'{str(r.emoji)}x{r.count}' for r in msg.reactions]})" if msg.reactions else ""
         transcript_list.append(f"USER: {msg.author.display_name} | MSG: {msg.content}{rx_str}")
     return transcript_list
 
 async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts=None, forced_model=None, use_grounding=False):
-    async with ctx.typing():
-        response = None
-        used_model = ""
-        now = datetime.now()
-        content_payload = [prompt] + (media_parts if media_parts else [])
-        target_models = [forced_model] if forced_model else MODEL_CHAIN
-        
-        for model_name in target_models:
-            if model_name not in exhausted_tracker: exhausted_tracker[model_name] = {}
-            for i, key in enumerate(ALL_KEYS):
-                if i in exhausted_tracker[model_name] and now < exhausted_tracker[model_name][i]: continue
-                try:
-                    client = genai.Client(api_key=key)
-                    config = {}
-                    if use_grounding:
-                        config['tools'] = [{'google_search': {}}]
-                    
-                    response = await asyncio.to_thread(client.models.generate_content, model=model_name, contents=content_payload, config=config)
-                    used_model = model_name
-                    today = now.strftime('%Y-%m-%d')
-                    data = load_json_data("usage_stats.json")
-                    if today not in data: 
-                        data[today] = {m: 0 for m in (['gemini-3.1-pro-preview'] + MODEL_CHAIN)}
-                    data[today][model_name] = data[today].get(model_name, 0) + 1
-                    save_json_data("usage_stats.json", data)
-                    break 
-                except errors.ClientError as e:
-                    if "429" in str(e): 
-                        exhausted_tracker[model_name][i] = now + timedelta(seconds=65)
-                        continue
-                    log_info(f"API ClientError intercepted for model {model_name} (Key Index {i}): {e}")
-                    return await ctx.send(f"⚠️ API Error: `{e}`")
-                except Exception as e:
-                    log_info(f"API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
+    response = None
+    used_model = ""
+    now = datetime.now()
+    content_payload = [prompt] + (media_parts if media_parts else [])
+    target_models = [forced_model] if forced_model else MODEL_CHAIN
+    
+    for model_name in target_models:
+        if model_name not in exhausted_tracker: exhausted_tracker[model_name] = {}
+        for i, key in enumerate(ALL_KEYS):
+            if i in exhausted_tracker[model_name] and now < exhausted_tracker[model_name][i]: continue
+            try:
+                client = genai.Client(api_key=key)
+                config = {}
+                if use_grounding:
+                    config['tools'] = [{'google_search': {}}]
+                
+                response = await asyncio.to_thread(client.models.generate_content, model=model_name, contents=content_payload, config=config)
+                used_model = model_name
+                today = now.strftime('%Y-%m-%d')
+                data = load_json_data("usage_stats.json")
+                if today not in data: 
+                    data[today] = {m: 0 for m in (['gemini-3.1-pro-preview'] + MODEL_CHAIN)}
+                data[today][model_name] = data[today].get(model_name, 0) + 1
+                save_json_data("usage_stats.json", data)
+                break 
+            except errors.ClientError as e:
+                if "429" in str(e): 
+                    exhausted_tracker[model_name][i] = now + timedelta(seconds=65)
                     continue
-            if response: break
-        
-        if not response: return await ctx.send(f"🔄 Quota Error: `{target_models}` exhausted.")
-        
-        sections = response.text.split("---SPLIT---")
-        
-        # 1. Output content sections first
-        for s in sections:
-            content = s.strip()
-            if content and "WINNER:" not in content:
-                for j in range(0, len(content), 1900): await ctx.send(content[j:j+1900])
+                log_info(f"API ClientError intercepted for model {model_name} (Key Index {i}): {e}")
+                return await ctx.send(f"⚠️ API Error: `{e}`")
+            except Exception as e:
+                log_info(f"API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
+                continue
+        if response: break
+    
+    if not response: return await ctx.send(f"🔄 Quota Error: `{target_models}` exhausted.")
+    
+    sections = response.text.split("---SPLIT---")
+    
+    # 1. Output content sections first
+    for s in sections:
+        content = s.strip()
+        if content and "WINNER:" not in content:
+            for j in range(0, len(content), 1900): await ctx.send(content[j:j+1900])
 
-        # 2. Process Mogg Ledger data AFTER content is sent
-        if update_stats:
-            # Search last section for the winner/loser pattern
-            match = re.search(r"WINNER:\s*([^\s|]+)\s*\|\s*LOSER:\s*([^\s\n\r]+)", sections[-1], re.IGNORECASE)
-            if match:
-                w, l = match.group(1).strip().rstrip('.,!'), match.group(2).strip().rstrip('.,!')
-                m_data = load_json_data("mogg_stats.json")
-                s_id = str(ctx.guild.id); m_data.setdefault(s_id, {})
-                for p in [w, l]: m_data[s_id].setdefault(p, {"wins": 0, "losses": 0})
-                m_data[s_id][w]["wins"] += 1; m_data[s_id][l]["losses"] += 1
-                save_json_data("mogg_stats.json", m_data)
-                await ctx.send(f"# 🏟️ MOGG LEDGER\n* **Winner:** {w} | **Loser:** {l}")
+    # 2. Process Mogg Ledger data AFTER content is sent
+    if update_stats:
+        # Search last section for the winner/loser pattern
+        match = re.search(r"WINNER:\s*([^\s|]+)\s*\|\s*LOSER:\s*([^\s\n\r]+)", sections[-1], re.IGNORECASE)
+        if match:
+            w, l = match.group(1).strip().rstrip('.,!'), match.group(2).strip().rstrip('.,!')
+            m_data = load_json_data("mogg_stats.json")
+            s_id = str(ctx.guild.id); m_data.setdefault(s_id, {})
+            for p in [w, l]: m_data[s_id].setdefault(p, {"wins": 0, "losses": 0})
+            m_data[s_id][w]["wins"] += 1; m_data[s_id][l]["losses"] += 1
+            save_json_data("mogg_stats.json", m_data)
+            await ctx.send(f"# 🏟️ MOGG LEDGER\n* **Winner:** {w} | **Loser:** {l}")
 
-        # 3. Final Footer
-        footer = f"### {title} for {ctx.author.mention}\n> **Model:** `{used_model}`"
-        if use_grounding:
-            footer += " | 🛰️ `Search Grounding Active`"
-        await ctx.send(footer)
+    # 3. Final Footer
+    footer = f"### {title} for {ctx.author.mention}\n> **Model:** `{used_model}`"
+    if use_grounding:
+        footer += " | 🛰️ `Search Grounding Active`"
+    await ctx.send(footer)
 
-@bot.command(name="tldr")
+@bot.hybrid_command(name="tldr", description="Generates a clear bullet-point structural breakdown of guild conversation blocks.")
 @commands.cooldown(1, 30, commands.BucketType.channel)
 async def tldr(ctx, *, args: str = "50"):
-    try: await ctx.message.add_reaction("✅")
+    await ctx.defer()
+    try: 
+        if ctx.message: await ctx.message.add_reaction("✅")
     except: pass
     transcript = await fetch_history(ctx, args)
     if not transcript: return await ctx.send("No messages found.")
@@ -526,10 +536,12 @@ async def tldr(ctx, *, args: str = "50"):
     )
     await process_ai_request(ctx, prompt, "Summary", update_stats=True)
 
-@bot.command(name="arguments")
+@bot.hybrid_command(name="arguments", description="Performs strict logical context conflict mapping and cross-references positions.")
 @commands.cooldown(1, 30, commands.BucketType.channel)
 async def arguments(ctx, *, args: str = "50"):
-    try: await ctx.message.add_reaction("✅")
+    await ctx.defer()
+    try: 
+        if ctx.message: await ctx.message.add_reaction("✅")
     except: pass
     transcript = await fetch_history(ctx, args)
     if not transcript: return await ctx.send("No messages found.")

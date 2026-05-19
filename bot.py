@@ -11,11 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.1.4 - Hybrid Parameter Context 🧩
-# 1. Added explicit `link` and `text` parameter ingestion for /tldw and /huh.
-# 2. Engineered smart context routing to support both Slash inputs and Prefix replies simultaneously.
-# 3. Maintained strict asyncio global queuing to prevent concurrent response collisions.
-BOT_VERSION = "v5.1.4 - Hybrid Parameter Context 🧩"
+# v5.1.5 - Default Scope Refinement 🎯
+# 1. Defaulted !tldr to 'today' (midnight to current).
+# 2. Defaulted !arguments to 1 hour window.
+# 3. Maintained queue locking, hybrid commands, and anti-loop stability.
+BOT_VERSION = "v5.1.5 - Default Scope Refinement 🎯"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -275,14 +275,14 @@ async def help_command(ctx):
         "🤖 **Bot Commands**\n"
         "**`/version`**\n"
         "Shows build version, uptime, and changelog.\n\n"
-        "**`/tldr [amount/today]`**\n"
-        "Bullet-point summaries + Cortisol detection.\n\n"
+        "**`/tldr [today/count]`**\n"
+        "Bullet-point summaries + Cortisol detection (Default: today).\n\n"
         "**`/tldw [optional: link]`**\n"
         "Summarizes and fact-checks YouTube videos. Provide a link or reply via prefix.\n\n"
         "**`/huh [optional: text]`**\n"
         "Explains content and fact-checks. Provide text or reply via prefix.\n\n"
-        "**`/arguments [amount/today]`**\n"
-        "Conflict analysis with bullet-point evidence.\n\n"
+        "**`/arguments [1h/today/count]`**\n"
+        "Conflict analysis with bullet-point evidence (Default: 1h).\n\n"
         "**`/cortisolcheck @name`**\n"
         "**`/moggboard`**\n"
         "View the server's dominance hierarchy.\n\n"
@@ -458,7 +458,12 @@ async def update(ctx):
 async def fetch_history(ctx, args):
     raw_input = args.strip().lower()
     transcript_list = []
-    if raw_input == "today":
+    
+    # 1. Added explicit hour tracking check
+    if "hour" in raw_input or raw_input == "1h":
+        time_limit = datetime.now() - timedelta(hours=1)
+        target_history = ctx.channel.history(after=time_limit, oldest_first=True, limit=500)
+    elif raw_input == "today":
         today_start = datetime.combine(datetime.now().date(), time.min)
         target_history = ctx.channel.history(after=today_start, oldest_first=True, limit=1000)
     else:
@@ -471,6 +476,7 @@ async def fetch_history(ctx, args):
         else:
             numbers = re.findall(r'\d+', raw_input)
             target_history = ctx.channel.history(limit=min(int(numbers[0]) if numbers else 50, 300))
+            
     async for msg in target_history:
         if msg.author.bot or (ctx.message and msg.id == ctx.message.id): continue
         rx_str = f" (REACTIONS: {[f'{str(r.emoji)}x{r.count}' for r in msg.reactions]})" if msg.reactions else ""
@@ -546,7 +552,7 @@ async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts
 
 @bot.hybrid_command(name="tldr", description="Generates a clear bullet-point structural breakdown of guild conversation blocks.")
 @commands.cooldown(1, 30, commands.BucketType.channel)
-async def tldr(ctx, *, args: str = "50"):
+async def tldr(ctx, *, args: str = "today"):
     await ctx.defer()
     try: 
         if ctx.message: await ctx.message.add_reaction("✅")
@@ -568,7 +574,7 @@ async def tldr(ctx, *, args: str = "50"):
 
 @bot.hybrid_command(name="arguments", description="Performs strict logical context conflict mapping and cross-references positions.")
 @commands.cooldown(1, 30, commands.BucketType.channel)
-async def arguments(ctx, *, args: str = "50"):
+async def arguments(ctx, *, args: str = "1h"):
     await ctx.defer()
     try: 
         if ctx.message: await ctx.message.add_reaction("✅")

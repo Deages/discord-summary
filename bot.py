@@ -11,10 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.1.1 - Application Command Size Fix 🛠️
-# 1. Shortened all hybrid command description fields to strictly conform to Discord's 100-char max cap.
-# 2. Maintained pristine application flow, automated global tree syncing, and debugging metrics.
-BOT_VERSION = "v5.1.1 - Application Command Size Fix 🛠️"
+# v5.1.2 - Anti-Loop & Hash Normalization 🛡️
+# 1. Implemented line-ending normalization for SHA256 hashing to prevent OS desyncs.
+# 2. Added `failed_update.txt` lock to prevent infinite CDN cache loops.
+# 3. Maintained Application Commands (Slash) structure with tightened 100-char descriptions.
+BOT_VERSION = "v5.1.2 - Anti-Loop & Hash Normalization 🛡️"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -45,7 +46,7 @@ def log_info(msg):
 def get_changelog():
     """Extracts the VERSION TRACKING section from the source code for Discord output."""
     try:
-        with open(__file__, "r") as f:
+        with open(__file__, "r", encoding="utf-8") as f:
             content = f.read()
             match = re.search(r"# --- VERSION TRACKING ---\n(.*?)\nBOT_VERSION", content, re.DOTALL)
             if match:
@@ -59,7 +60,7 @@ def load_file(filename):
     """Reads text files (tokens/keys) and returns a list of non-empty lines."""
     try:
         path = os.path.join(os.getcwd(), filename)
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return [line.strip() for line in f if line.strip()]
     except FileNotFoundError:
         return []
@@ -68,7 +69,7 @@ def save_text_safe(filename, content):
     """Saves text to disk with fsync to ensure it is committed before a process exit."""
     try:
         path = os.path.join(os.getcwd(), filename)
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             f.write(content)
             f.flush()
             os.fsync(f.fileno())
@@ -80,7 +81,7 @@ def load_json_data(filename):
     path = os.path.join(os.getcwd(), filename)
     if not os.path.exists(path): return {}
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.loads(f.read().strip())
     except Exception:
         return {}
@@ -89,7 +90,7 @@ def save_json_data(filename, data):
     """Saves data with os.fsync to ensure disk commitment and prevent corruption."""
     path = os.path.join(os.getcwd(), filename)
     try:
-        with open(path, "w") as f:
+        with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
             f.flush()
             os.fsync(f.fileno()) 
@@ -132,15 +133,16 @@ bot.remove_command('help')
 # --- UPDATE UTILITIES ---
 
 def get_file_hash(filepath):
-    """Generates a SHA256 hash of a file to detect content changes."""
-    sha256_hash = hashlib.sha256()
-    with open(filepath, "rb") as f:
-        for byte_block in iter(lambda: f.read(4096), b""):
-            sha256_hash.update(byte_block)
-    return sha256_hash.hexdigest()
+    """Generates a SHA256 hash of a file, normalizing line endings to prevent OS desyncs."""
+    try:
+        with open(filepath, "r", encoding="utf-8") as f:
+            content = f.read().replace('\r\n', '\n')
+        return hashlib.sha256(content.encode('utf-8')).hexdigest()
+    except Exception:
+        return ""
 
 async def fetch_remote_hash():
-    """Fetches remote hash with strict no-cache headers to bypass GitHub CDN."""
+    """Fetches remote hash with strict no-cache headers and normalizes line endings."""
     headers = {
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
@@ -151,7 +153,8 @@ async def fetch_remote_hash():
             async with session.get(f"{GITHUB_RAW_URL}?t={datetime.now().timestamp()}") as resp:
                 if resp.status == 200:
                     content = await resp.read()
-                    return hashlib.sha256(content).hexdigest()
+                    text = content.decode('utf-8', errors='ignore').replace('\r\n', '\n')
+                    return hashlib.sha256(text.encode('utf-8')).hexdigest()
                 log_info(f"Update check HTTP Error: {resp.status}")
     except Exception as e:
         log_info(f"Update check Connection Error: {e}")
@@ -165,6 +168,10 @@ async def check_for_updates():
     
     if remote_hash:
         if local_hash != remote_hash:
+            failed_hashes = load_file("failed_update.txt")
+            if remote_hash in failed_hashes:
+                log_info(f"Heartbeat: Skipping {remote_hash[:8]} (Failed sync lock active)")
+                return
             log_info(f"AUTO-UPDATE DETECTED: Local[{local_hash[:8]}] vs Remote[{remote_hash[:8]}]")
             save_text_safe("pending_update.txt", f"{remote_hash}|auto|0")
             sys.exit(0)
@@ -210,6 +217,7 @@ async def on_ready():
                 sys.exit(0)
             else:
                 log_info(f"CRITICAL: Sync failed after retry. Aborting loop.")
+                save_text_safe("failed_update.txt", expected_hash)
                 os.remove(pending_file)
         else:
             log_info(f"Verified successful {update_type} sync. Posting report...")
@@ -293,7 +301,7 @@ async def version(ctx):
     msg = (f"🤖 **Current Version:** `{BOT_VERSION}`\n⏱️ **Uptime:** `{uptime_str}`\n\n**Recent Changes:**\n{changelog}")
     await ctx.send(msg)
 
-@bot.hybrid_command(name="moggboard", description="Exposes the conversational leadership metrics and dominance ratios for this guild.")
+@bot.hybrid_command(name="moggboard", description="Exposes conversational leadership metrics and dominance ratios.")
 async def moggboard(ctx):
     all_data = load_json_data("mogg_stats.json")
     server_data = all_data.get(str(ctx.guild.id), {})
@@ -406,7 +414,7 @@ async def clearmogs(ctx):
 async def botlog(ctx):
     if ctx.author.id not in ADMIN_IDS: return await ctx.send("⛔ Denied.")
     try:
-        with open("bot_terminal.log", "r") as f:
+        with open("bot_terminal.log", "r", encoding="utf-8") as f:
             lines = f.readlines()
             last_10 = "".join(lines[-10:])
             await ctx.send("```text\n" + last_10 + "\n```")

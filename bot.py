@@ -11,11 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.0.10 - Stable Pro Shift 🚀
-# 1. Switched !tldw and !huh commands to use stable production 'gemini-2.5-pro'.
-# 2. Maintained robust exception exposure inside process_ai_request for full debugging.
-# 3. Preserved all pristine data persistance models, updates, and formatting rules.
-BOT_VERSION = "v5.0.10 - Stable Pro Shift 🚀"
+# v5.0.11 - Premium Pro Restoration 👑
+# 1. Reverted model overrides back to 'gemini-3.1-pro-preview' for !tldw and !huh.
+# 2. Maintained error exposure systems to ensure seamless tracking on paid quotas.
+# 3. Preserved pristine file sync paths, features, and markdown configurations.
+BOT_VERSION = "v5.0.11 - Premium Pro Restoration 👑"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -116,7 +116,7 @@ MODEL_CHAIN = [
 
 # Hard-coded daily limits per key.
 DAILY_LIMITS = {
-    'gemini-2.5-pro': 5,
+    'gemini-3.1-pro-preview': 5, 
     'gemini-3-flash-preview': 50, 
     'gemini-2.5-flash': 20, 
     'gemini-3.1-flash-lite-preview': 100
@@ -313,7 +313,7 @@ async def huh(ctx):
                 image_data = await attachment.read()
                 media_parts.append(types.Part.from_bytes(data=image_data, mime_type='image/jpeg'))
     prompt = (f"CONTEXT: Explain concisely.\nCONTENT: {target.content}\nINSTRUCTIONS:\n1. Summarize in 1-2 short sentences.\n2. Fact check; link primary source if false.\n3. Strict brevity.")
-    await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-2.5-pro')
+    await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-3.1-pro-preview')
 
 @bot.command(name="cortisolcheck")
 async def cortisolcheck(ctx, member: discord.Member):
@@ -366,7 +366,7 @@ async def tldw(ctx):
                 "4. Use emojis for formatting."
             )
             
-            await process_ai_request(ctx, prompt, "Video Research Analysis", forced_model='gemini-2.5-pro', use_grounding=True)
+            await process_ai_request(ctx, prompt, "Video Research Analysis", forced_model='gemini-3.1-pro-preview', use_grounding=True)
             
         except Exception as e:
             log_info(f"TLDW Command Error: {e}")
@@ -377,7 +377,7 @@ async def keystatus(ctx):
     now = datetime.now()
     usage = load_json_data("usage_stats.json").get(now.strftime('%Y-%m-%d'), {})
     msg = "### 🔑 API Key & Quota Status\n"
-    monitored_models = ['gemini-2.5-pro'] + MODEL_CHAIN
+    monitored_models = ['gemini-3.1-pro-preview'] + MODEL_CHAIN
     for model in monitored_models:
         dead = len(exhausted_tracker.get(model, {}))
         used = usage.get(model, 0)
@@ -462,7 +462,7 @@ async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts
                     today = now.strftime('%Y-%m-%d')
                     data = load_json_data("usage_stats.json")
                     if today not in data: 
-                        data[today] = {m: 0 for m in (['gemini-2.5-pro'] + MODEL_CHAIN)}
+                        data[today] = {m: 0 for m in (['gemini-3.1-pro-preview'] + MODEL_CHAIN)}
                     data[today][model_name] = data[today].get(model_name, 0) + 1
                     save_json_data("usage_stats.json", data)
                     break 

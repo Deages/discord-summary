@@ -11,11 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.1.2 - Anti-Loop & Hash Normalization 🛡️
-# 1. Implemented line-ending normalization for SHA256 hashing to prevent OS desyncs.
-# 2. Added `failed_update.txt` lock to prevent infinite CDN cache loops.
-# 3. Maintained Application Commands (Slash) structure with tightened 100-char descriptions.
-BOT_VERSION = "v5.1.2 - Anti-Loop & Hash Normalization 🛡️"
+# v5.1.3 - Sequential Queuing & Flow 🚦
+# 1. Implemented asyncio.Lock() to force global command queuing and prevent interleaved outputs.
+# 2. Sequential locking ensures multi-chunk hybrid outputs fire in rapid, uninterrupted bursts.
+# 3. Maintained strict application tree validation and CDN hash normalization from v5.1.2.
+BOT_VERSION = "v5.1.3 - Sequential Queuing & Flow 🚦"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -106,6 +106,9 @@ ADMIN_IDS = [int(i) for i in load_file("admins.txt")]
 
 # exhausted_tracker: { "model_name": { key_index: resume_datetime } }
 exhausted_tracker = {} 
+
+# Global Processing Queue Lock
+bot_processing_lock = asyncio.Lock()
 
 # General fallback sequence for standard commands. 
 MODEL_CHAIN = [
@@ -456,70 +459,71 @@ async def fetch_history(ctx, args):
     return transcript_list
 
 async def process_ai_request(ctx, prompt, title, update_stats=False, media_parts=None, forced_model=None, use_grounding=False):
-    response = None
-    used_model = ""
-    now = datetime.now()
-    content_payload = [prompt] + (media_parts if media_parts else [])
-    target_models = [forced_model] if forced_model else MODEL_CHAIN
-    
-    for model_name in target_models:
-        if model_name not in exhausted_tracker: exhausted_tracker[model_name] = {}
-        for i, key in enumerate(ALL_KEYS):
-            if i in exhausted_tracker[model_name] and now < exhausted_tracker[model_name][i]: continue
-            try:
-                client = genai.Client(api_key=key)
-                config = {}
-                if use_grounding:
-                    config['tools'] = [{'google_search': {}}]
-                
-                response = await asyncio.to_thread(client.models.generate_content, model=model_name, contents=content_payload, config=config)
-                used_model = model_name
-                today = now.strftime('%Y-%m-%d')
-                data = load_json_data("usage_stats.json")
-                if today not in data: 
-                    data[today] = {m: 0 for m in (['gemini-3.1-pro-preview'] + MODEL_CHAIN)}
-                data[today][model_name] = data[today].get(model_name, 0) + 1
-                save_json_data("usage_stats.json", data)
-                break 
-            except errors.ClientError as e:
-                if "429" in str(e): 
-                    exhausted_tracker[model_name][i] = now + timedelta(seconds=65)
+    async with bot_processing_lock:
+        response = None
+        used_model = ""
+        now = datetime.now()
+        content_payload = [prompt] + (media_parts if media_parts else [])
+        target_models = [forced_model] if forced_model else MODEL_CHAIN
+        
+        for model_name in target_models:
+            if model_name not in exhausted_tracker: exhausted_tracker[model_name] = {}
+            for i, key in enumerate(ALL_KEYS):
+                if i in exhausted_tracker[model_name] and now < exhausted_tracker[model_name][i]: continue
+                try:
+                    client = genai.Client(api_key=key)
+                    config = {}
+                    if use_grounding:
+                        config['tools'] = [{'google_search': {}}]
+                    
+                    response = await asyncio.to_thread(client.models.generate_content, model=model_name, contents=content_payload, config=config)
+                    used_model = model_name
+                    today = now.strftime('%Y-%m-%d')
+                    data = load_json_data("usage_stats.json")
+                    if today not in data: 
+                        data[today] = {m: 0 for m in (['gemini-3.1-pro-preview'] + MODEL_CHAIN)}
+                    data[today][model_name] = data[today].get(model_name, 0) + 1
+                    save_json_data("usage_stats.json", data)
+                    break 
+                except errors.ClientError as e:
+                    if "429" in str(e): 
+                        exhausted_tracker[model_name][i] = now + timedelta(seconds=65)
+                        continue
+                    log_info(f"API ClientError intercepted for model {model_name} (Key Index {i}): {e}")
+                    return await ctx.send(f"⚠️ API Error: `{e}`")
+                except Exception as e:
+                    log_info(f"API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
                     continue
-                log_info(f"API ClientError intercepted for model {model_name} (Key Index {i}): {e}")
-                return await ctx.send(f"⚠️ API Error: `{e}`")
-            except Exception as e:
-                log_info(f"API Exception intercepted for model {model_name} (Key Index {i}): {type(e).__name__} - {e}")
-                continue
-        if response: break
-    
-    if not response: return await ctx.send(f"🔄 Quota Error: `{target_models}` exhausted.")
-    
-    sections = response.text.split("---SPLIT---")
-    
-    # 1. Output content sections first
-    for s in sections:
-        content = s.strip()
-        if content and "WINNER:" not in content:
-            for j in range(0, len(content), 1900): await ctx.send(content[j:j+1900])
+            if response: break
+        
+        if not response: return await ctx.send(f"🔄 Quota Error: `{target_models}` exhausted.")
+        
+        sections = response.text.split("---SPLIT---")
+        
+        # 1. Output content sections first
+        for s in sections:
+            content = s.strip()
+            if content and "WINNER:" not in content:
+                for j in range(0, len(content), 1900): await ctx.send(content[j:j+1900])
 
-    # 2. Process Mogg Ledger data AFTER content is sent
-    if update_stats:
-        # Search last section for the winner/loser pattern
-        match = re.search(r"WINNER:\s*([^\s|]+)\s*\|\s*LOSER:\s*([^\s\n\r]+)", sections[-1], re.IGNORECASE)
-        if match:
-            w, l = match.group(1).strip().rstrip('.,!'), match.group(2).strip().rstrip('.,!')
-            m_data = load_json_data("mogg_stats.json")
-            s_id = str(ctx.guild.id); m_data.setdefault(s_id, {})
-            for p in [w, l]: m_data[s_id].setdefault(p, {"wins": 0, "losses": 0})
-            m_data[s_id][w]["wins"] += 1; m_data[s_id][l]["losses"] += 1
-            save_json_data("mogg_stats.json", m_data)
-            await ctx.send(f"# 🏟️ MOGG LEDGER\n* **Winner:** {w} | **Loser:** {l}")
+        # 2. Process Mogg Ledger data AFTER content is sent
+        if update_stats:
+            # Search last section for the winner/loser pattern
+            match = re.search(r"WINNER:\s*([^\s|]+)\s*\|\s*LOSER:\s*([^\s\n\r]+)", sections[-1], re.IGNORECASE)
+            if match:
+                w, l = match.group(1).strip().rstrip('.,!'), match.group(2).strip().rstrip('.,!')
+                m_data = load_json_data("mogg_stats.json")
+                s_id = str(ctx.guild.id); m_data.setdefault(s_id, {})
+                for p in [w, l]: m_data[s_id].setdefault(p, {"wins": 0, "losses": 0})
+                m_data[s_id][w]["wins"] += 1; m_data[s_id][l]["losses"] += 1
+                save_json_data("mogg_stats.json", m_data)
+                await ctx.send(f"# 🏟️ MOGG LEDGER\n* **Winner:** {w} | **Loser:** {l}")
 
-    # 3. Final Footer
-    footer = f"### {title} for {ctx.author.mention}\n> **Model:** `{used_model}`"
-    if use_grounding:
-        footer += " | 🛰️ `Search Grounding Active`"
-    await ctx.send(footer)
+        # 3. Final Footer
+        footer = f"### {title} for {ctx.author.mention}\n> **Model:** `{used_model}`"
+        if use_grounding:
+            footer += " | 🛰️ `Search Grounding Active`"
+        await ctx.send(footer)
 
 @bot.hybrid_command(name="tldr", description="Generates a clear bullet-point structural breakdown of guild conversation blocks.")
 @commands.cooldown(1, 30, commands.BucketType.channel)

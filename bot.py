@@ -11,11 +11,11 @@ from logging.handlers import RotatingFileHandler
 from datetime import datetime, timedelta, time
 
 # --- VERSION TRACKING ---
-# v5.1.3 - Sequential Queuing & Flow 🚦
-# 1. Implemented asyncio.Lock() to force global command queuing and prevent interleaved outputs.
-# 2. Sequential locking ensures multi-chunk hybrid outputs fire in rapid, uninterrupted bursts.
-# 3. Maintained strict application tree validation and CDN hash normalization from v5.1.2.
-BOT_VERSION = "v5.1.3 - Sequential Queuing & Flow 🚦"
+# v5.1.4 - Hybrid Parameter Context 🧩
+# 1. Added explicit `link` and `text` parameter ingestion for /tldw and /huh.
+# 2. Engineered smart context routing to support both Slash inputs and Prefix replies simultaneously.
+# 3. Maintained strict asyncio global queuing to prevent concurrent response collisions.
+BOT_VERSION = "v5.1.4 - Hybrid Parameter Context 🧩"
 
 # --- GLOBAL START TIME ---
 START_TIME = datetime.now()
@@ -277,10 +277,10 @@ async def help_command(ctx):
         "Shows build version, uptime, and changelog.\n\n"
         "**`/tldr [amount/today]`**\n"
         "Bullet-point summaries + Cortisol detection.\n\n"
-        "**`/tldw`**\n"
-        "**(Reply Required via Message Link / Prefix Context)** Summarizes and fact-checks YouTube videos.\n\n"
-        "**`/huh`**\n"
-        "**(Reply Required via Prefix Context)** Explains content and fact-checks a single message.\n\n"
+        "**`/tldw [optional: link]`**\n"
+        "Summarizes and fact-checks YouTube videos. Provide a link or reply via prefix.\n\n"
+        "**`/huh [optional: text]`**\n"
+        "Explains content and fact-checks. Provide text or reply via prefix.\n\n"
         "**`/arguments [amount/today]`**\n"
         "Conflict analysis with bullet-point evidence.\n\n"
         "**`/cortisolcheck @name`**\n"
@@ -318,19 +318,30 @@ async def moggboard(ctx):
     await ctx.send(msg)
 
 @bot.hybrid_command(name="huh", description="Decodes context and provides an intensive fact-check over referenced content.")
-async def huh(ctx):
-    if not ctx.message or not ctx.message.reference: 
-        return await ctx.send("❌ For hybrid slash use, you must reply to a target message using prefix !huh pattern.")
-    try: await ctx.message.add_reaction("🔍")
+async def huh(ctx, *, text: str = None):
+    await ctx.defer()
+    try: 
+        if ctx.message: await ctx.message.add_reaction("🔍")
     except: pass
-    target = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+    
+    target_content = None
     media_parts = []
-    if target.attachments:
-        for attachment in target.attachments:
-            if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
-                image_data = await attachment.read()
-                media_parts.append(types.Part.from_bytes(data=image_data, mime_type='image/jpeg'))
-    prompt = (f"CONTEXT: Explain concisely.\nCONTENT: {target.content}\nINSTRUCTIONS:\n1. Summarize in 1-2 short sentences.\n2. Fact check; link primary source if false.\n3. Strict brevity.")
+    
+    # 1. Fallback routing logic for slash inputs vs prefix replies
+    if text:
+        target_content = text
+    elif ctx.message and ctx.message.reference:
+        target = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        target_content = target.content
+        if target.attachments:
+            for attachment in target.attachments:
+                if any(attachment.filename.lower().endswith(ext) for ext in ['png', 'jpg', 'jpeg', 'webp']):
+                    image_data = await attachment.read()
+                    media_parts.append(types.Part.from_bytes(data=image_data, mime_type='image/jpeg'))
+    else:
+        return await ctx.send("❌ **Usage:** Provide `text` via slash command (`/huh text:...`), or reply to a message using the prefix (`!huh`).")
+
+    prompt = (f"CONTEXT: Explain concisely.\nCONTENT: {target_content}\nINSTRUCTIONS:\n1. Summarize in 1-2 short sentences.\n2. Fact check; link primary source if false.\n3. Strict brevity.")
     await process_ai_request(ctx, prompt, "Explanation & Fact-Check", media_parts=media_parts, forced_model='gemini-3.1-pro-preview')
 
 @bot.hybrid_command(name="cortisolcheck", description="Maps chronological conversational analytics to gauge metabolic tension indicators.")
@@ -357,23 +368,31 @@ async def cortisolcheck(ctx, member: discord.Member):
     await process_ai_request(ctx, prompt, f"Cortisol Diagnostic: {member.display_name}", forced_model=None)
 
 @bot.hybrid_command(name="tldw", description="Ingests a YouTube link and provides a deep reasoning summary with grounding lookups.")
-async def tldw(ctx):
+async def tldw(ctx, link: str = None):
     """Summarizes and fact-checks a YouTube video with bullet point formatting."""
-    if not ctx.message or not ctx.message.reference:
-        return await ctx.send("❌ Link analysis requires launching via classic standard layout or reply mapping context.")
-    
-    try: await ctx.message.add_reaction("📺")
+    await ctx.defer()
+    try: 
+        if ctx.message: await ctx.message.add_reaction("📺")
     except: pass
 
-    await ctx.defer()
-    try:
+    target_content = None
+
+    # 1. Fallback routing logic for slash inputs vs prefix replies
+    if link:
+        target_content = link
+    elif ctx.message and ctx.message.reference:
         target = await ctx.channel.fetch_message(ctx.message.reference.message_id)
+        target_content = target.content
+    else:
+        return await ctx.send("❌ **Usage:** Provide a `link` directly via slash command (`/tldw link:...`), or reply to a message using the prefix (`!tldw`).")
+        
+    try:
         regex = r"(https?://(?:www\.)?(?:youtube\.com/watch\?v=[^ \n&]+|youtu\.be/[^ \n&?]+))"
-        match = re.search(regex, target.content)
+        match = re.search(regex, target_content)
         
         if not match:
-            return await ctx.send("❌ No valid YouTube link found in the replied message.")
-        
+            return await ctx.send("❌ No valid YouTube link found.")
+            
         video_url = match.group(1)
         
         prompt = (
